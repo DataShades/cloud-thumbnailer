@@ -61,10 +61,10 @@ Usage
 
 	thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, threads_num)
 
-	*scale_size* - tuple with two integer values e.g. (600, 800);
-	*crop_size* - tuple with two integer values e.g. (300, 300);
-	*driver* - our generated driver connector; _Default_: None
-	*threads_num* - number of running threads at the same time. _Default_: 3
+*scale_size* - tuple with two integer values e.g. (600, 800);
+*crop_size* - tuple with two integer values e.g. (300, 300);
+*driver* - our generated driver connector; _Default_: None
+*threads_num* - number of running threads at the same time. _Default_: 3
 
 5. Run the method you need::
 
@@ -94,4 +94,4 @@ Code sample::
 
 	def my_func_callback(response):
 		
-		retrun response
+		return response
