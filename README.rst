@@ -13,7 +13,7 @@ This Python plugin allows to imort resized images with their thumbnails into you
 Requirements
 ------------
 
-The plugin requires apache-libcloud version 1.4.0 and later just to for S3 Bucket region fix.
+The plugin requires apache-libcloud version 1.4.0 and later just for the S3 Bucket region fix.
 	Added S3_AP_SOUTHEAST2 Region.
 
 
