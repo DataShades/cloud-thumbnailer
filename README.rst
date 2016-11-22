@@ -57,7 +57,7 @@ Usage
 	
 	driver = CloudConnector('s3', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
 
-4. Create a thumbnailer instance:
+4. Create a thumbnailer instance
 
 	Instanse::
 
