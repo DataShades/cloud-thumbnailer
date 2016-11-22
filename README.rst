@@ -1,13 +1,13 @@
 
-------------------------------------------------------------------------------------------
+=================
 Cloud Thumbnailer
-------------------------------------------------------------------------------------------
+=================
 
 This Python plugin allows to imort resized images with their thumbnails into you cloud service from External urls, creates 1 resized image and 1 thumbnail of it.
 	
 	Now supports:
 		
-		S3_AP_SOUTHEAST2 Buckets.
+	S3_AP_SOUTHEAST2 Buckets.
 
 ------------
 Requirements
@@ -61,10 +61,13 @@ Usage
 
 	thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, threads_num)
 
-*scale_size* - tuple with two integer values e.g. (600, 800);
-*crop_size* - tuple with two integer values e.g. (300, 300);
-*driver* - our generated driver connector; _Default_: None
-*threads_num* - number of running threads at the same time. _Default_: 3
+**scale_size** - tuple with two integer values e.g. (600, 800);
+
+**crop_size** - tuple with two integer values e.g. (300, 300);
+
+**driver**- our generated driver connector; *Default*: None
+
+**threads_num** - number of running threads at the same time. *Default*: 3
 
 5. Run the method you need::
 
@@ -75,7 +78,8 @@ Usage
 	Additional Optional args:
 
 	key - recieve a key by which to find image url from csv/datadict
-	callback - function that recieves 1 argument of tuple that contains 2 objects which containe response from S3 ( Information about uploaded files ) 
+	callback - function that recieves 1 argument of tuple that contains 2 objects 
+	which containe response from S3 ( Information about uploaded files ) 
 
 -------------
 Usage Example
