@@ -57,11 +57,12 @@ Usage
 	
 	driver = CloudConnector('s3', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
 
-4. Create a thumbnailer instance::
+4. Create a thumbnailer instance:
 
-	thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, threads_num)
+	Instanse::
 
-	
+		thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, threads_num)
+
 	**scale_size** - tuple with two integer values e.g. (600, 800);
 
 	**crop_size** - tuple with two integer values e.g. (300, 300);
