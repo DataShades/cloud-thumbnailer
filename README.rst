@@ -3,7 +3,7 @@
 Cloud Thumbnailer
 =================
 
-This Python plugin allows to imort resized images with their thumbnails into you cloud service from External urls, creates 1 resized image and 1 thumbnail of it.
+This Python plugin allows to import resized images with their thumbnails into your cloud service from external urls, creates 1 resized image and 1 thumbnail of it.
 	
 Now supports:
 		
