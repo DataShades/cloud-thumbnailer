@@ -93,8 +93,8 @@ class ThumbsGenerator():
 		return image_resized, image_cropped
 
 	
-	def generate_thumbnail(self, image_url, callback, crop_type='middle'):
-		images_callback = []
+	def generate_thumbnail(self, image_url, image_data, callback, crop_type='middle'):
+		images_callback = [image_data]
 		
 		#Retrieve our source image from a URL
 		try:
@@ -158,22 +158,23 @@ class ThumbsGenerator():
 
 		return reader
 
-	def get_urls_from_dict(self, url, callback):
+	def get_urls_from_dict(self, key, callback):
 		sleep(0.1)
-		image_url = self.queue.get()
-		self.generate_thumbnail(image_url, callback)
+		image_data = self.queue.get()
+		image_url = image_data[key]
+		self.generate_thumbnail(image_url, image_data, callback)
 		print('===================================================================')
-		print(image_url)
+		print(image_data[key])
 		print('===================================================================')
 		self.semaphore.release()
 		print('Thread finished')
 
 
 
-	def generate_items_queue(self, data_dict, key):
+	def generate_items_queue(self, data_dict):
 
 		for row in data_dict:
-			self.queue.put(row[key])
+			self.queue.put(row)
 
 		print('Queue was generated!')
 
@@ -197,10 +198,10 @@ class ThumbsGenerator():
 
 		# Reading CSV data and converting it to data_dict
 		reader = self.get_dict_csv(csv_path)
-		self.generate_items_queue(reader, key)
+		self.generate_items_queue(reader)
 		self.run_multithreading_download(key, callback)
 
 	def download_from_dict(self, data_dict, key='url', callback=None):
 
-		self.generate_items_queue(data_dict, key)
+		self.generate_items_queue(data_dict)
 		self.run_multithreading_download(key, callback)
