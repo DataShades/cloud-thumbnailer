@@ -7,7 +7,7 @@ This Python plugin allows to imort resized images with their thumbnails into you
 	
 Now supports:
 		
-S3_AP_SOUTHEAST2 Buckets.
+All S3 Bucket Regions.
 
 ------------
 Requirements
@@ -46,30 +46,26 @@ Usage
 -----
 
 1. Import CloudConnector class:
+::	
+	from cloudthumbnailer.cloud_connector import CloudConnector
 
-```python	
-from cloudthumbnailer.cloud_connector import CloudConnector
-```
 
 2. Import ThumbsGenerator class:
+::
+	from cloudthumbnailer import ThumbsGenerator
 
-```python
-from cloudthumbnailer import ThumbsGenerator
-```
 
 3. Create a driver instance:
+::
+	driver = CloudConnector('s3', 'S3_REGION', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
 
-```python
-driver = CloudConnector('s3', 'S3_REGION', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
-```
 
 List of **S3_REGION** is provided in `libcloud docs <https://libcloud.readthedocs.io/en/latest/supported_providers.html#id180>`_
 
 4. Create a thumbnailer instance:
+::
+	thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, threads_num)
 
-```python
-thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, threads_num)
-```
 
 **scale_size** - tuple with two integer values e.g. (600, 800);
 
@@ -96,18 +92,16 @@ Usage Example
 -------------
 
 Code sample:
+::
+	from cloudthumbnailer.cloud_connector import CloudConnector
+	from cloudthumbnailer import ThumbsGenerator
 
-```python
-from cloudthumbnailer.cloud_connector import CloudConnector
-from cloudthumbnailer import ThumbsGenerator
+	driver = CloudConnector('s3', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
 
-driver = CloudConnector('s3', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
+	thumbnailer = ThumbsGenerator((600, 800), (300, 300), driver, 2)
 
-thumbnailer = ThumbsGenerator((600, 800), (300, 300), driver, 2)
+	thumbnailer.download_from_csv('/home/user/some-user/sample.csv', key='url', my_func_callback)
 
-thumbnailer.download_from_csv('/home/user/some-user/sample.csv', key='url', my_func_callback)
-
-def my_func_callback(response):
-	
-	return response
-```
+	def my_func_callback(response):
+		
+		return response
