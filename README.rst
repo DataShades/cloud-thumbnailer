@@ -14,7 +14,8 @@ Requirements
 ------------
 
 The plugin requires `apache-libcloud <https://github.com/apache/libcloud>`_ version 1.4.0 and later just for the S3 Bucket region fix.
-Supports all S3 regions about region information take a look at libcloud `documentation <https://libcloud.readthedocs.io/en/latest/supported_providers.html#id180>`_
+
+About region information take a look at libcloud `documentation <https://libcloud.readthedocs.io/en/latest/supported_providers.html#id180>`_
 
 
 ------------
@@ -39,7 +40,7 @@ to install the plugin itself.
 Running Tests
 -------------
 
-Test are now in progress...
+Tests are now in progress...
 
 -----
 Usage
