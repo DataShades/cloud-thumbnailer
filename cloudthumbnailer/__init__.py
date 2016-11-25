@@ -9,21 +9,27 @@ from io import BytesIO
 from Queue import Queue
 from threading import Thread, Semaphore
 from time import sleep
+import json
 
+import sys
 import logging
+logging.basicConfig()
 
 log = logging.getLogger(__name__)
 
 from pprint import pprint
 
+ALLOWED_TYPES = ['jpg', 'jpeg', 'gif', 'png']
+
 class ThumbsGenerator():
-	def __init__(self, scale_size, crop_size, driver=None, threads_num=3,):
+	def __init__(self, scale_size, crop_size, driver=None, check_exists=None, threads_num=3):
 		self.queue = Queue()
 		self.semaphore = Semaphore(threads_num)
 		self.driver = driver.driver
 		self.bucket = driver.bucket
 		self.crop_size = crop_size
 		self.scale_size = scale_size
+		self.check_exists = check_exists
 		self.stop_threading = False
 
 	def get_file_name(self, image_url):
@@ -160,15 +166,58 @@ class ThumbsGenerator():
 
 	def get_urls_from_dict(self, key, callback):
 		sleep(0.1)
-		image_data = self.queue.get()
-		image_url = image_data[key]
-		self.generate_thumbnail(image_url, image_data, callback)
-		print('===================================================================')
-		print(image_data[key])
-		print('===================================================================')
-		self.semaphore.release()
-		print('Thread finished')
+		
+		try:
+			image_data = self.queue.get()
+			image_url = image_data[key]
+			split_image = image_url.split('.')
+			image_type = split_image.pop().lower()
 
+			if image_type in ALLOWED_TYPES:
+				in_storage = self.check_file_in_storage(image_url, image_data)
+				if not in_storage:
+					self.generate_thumbnail(image_url, image_data, callback)
+					print('====================== File to convert ============================')
+					print(image_data[key])
+					print('===================================================================')
+			else:
+				log.warn("File type is not an image.")
+		finally:
+			self.queue.task_done()
+			self.semaphore.release()
+			print('Thread finished')
+
+
+	def check_file_in_storage(self, image_url, image_data):
+		
+		if self.check_exists is not None and isinstance(self.check_exists, dict):
+				
+			if self.check_exists['key'] in image_data and self.check_exists['sub_key']:
+				data_loaded = json.loads(image_data[self.check_exists['key']]) if self.check_exists['json'] else image_data[self.check_exists['key']]
+				
+				if self.check_exists['sub_key'] in data_loaded:
+					check_exists = requests.head(image_url)
+					get_tag = check_exists.headers.get('etag')
+					
+					if 'etag' in check_exists.headers:
+
+						if data_loaded[self.check_exists['sub_key']] == get_tag.strip('"'):
+							log.warn('Image already in storage.')
+
+							return True
+			
+			elif self.check_exists['key'] in image_data:
+					check_exists = requests.head(image_url)
+					
+					if 'etag' in check_exists.headers:
+						get_tag = check_exists.headers.get('etag')
+					
+						if image_data[self.check_exists['key']] == get_tag:
+							log.warn('Image already in storage.')
+
+							return True
+
+		return False
 
 
 	def generate_items_queue(self, data_dict):
@@ -176,23 +225,30 @@ class ThumbsGenerator():
 		for row in data_dict:
 			self.queue.put(row)
 
+
 		print('Queue was generated!')
 
 
-	def run_multithreading_download(self, key, callback):		
+	def run_multithreading_download(self, key, callback):
+		queue_size = self.queue.qsize()
 		
 		# Generating multiple Threads for downloading images from cloud and upload to bucket
-		while not self.queue.empty() and not self.stop_threading:
-			try:			
-				thread_image = Thread(target=self.get_urls_from_dict, args=(key, callback))
-				
-				self.semaphore.acquire()
-				print('Thread started: {0}'.format(thread_image.name))
-				thread_image.start()
-			
+		for i in range(queue_size):
+			try:
+				if not self.stop_threading:
+					thread_image = Thread(target=self.get_urls_from_dict, args=(key, callback))
+					thread_image.deamon = True
+					self.semaphore.acquire()
+					print('Thread started: {0}'.format(thread_image.name))
+					thread_image.start()
+			except self.queue.Empty:
+				print("The Queue ended.")
+				break
 			except KeyboardInterrupt:
-				print "Ctrl-c received! Sending kill to threads..."
+				print("Ctrl-c received! Sending kill to threads...")
 				self.stop_threading = True
+
+		self.queue.join()
 
 	def download_from_csv(self, csv_path, key='url', callback=None):
 
