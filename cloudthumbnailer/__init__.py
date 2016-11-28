@@ -44,12 +44,14 @@ class ThumbsGenerator():
 
 
 	def scale_image_by_width(self, image, width):
+		width = width if image.size[0] >= width else image.size[0]
 		scaled_image = image.resize((width, int(round(width * image.size[1] / image.size[0]))), Image.NEAREST)
 
 		return scaled_image
 
 
 	def scale_image_by_height(self, image, height):
+		height = height if image.size[1] >= height else image.size[1]
 		scaled_image = image.resize((int(round(height * image.size[0] / image.size[1])), height), Image.NEAREST)
 
 		return scaled_image
@@ -82,7 +84,7 @@ class ThumbsGenerator():
 		image_ratio = image.size[0] / float(image.size[1])
 		ratio = self.scale_size[0] / float(self.scale_size[1])
 
-		if ratio > image_ratio:
+		if ratio >= image_ratio:
 			
 			#Resize the image
 			image_resized = self.scale_image_by_width(image, self.scale_size[0])
@@ -93,6 +95,7 @@ class ThumbsGenerator():
 			#Resize the image
 			image_resized = self.scale_image_by_height(image, self.scale_size[1])
 			image_cropped = self.crop_image(image_resized, self.crop_size, crop_type)
+
 		else:
 			raise ValueError('ERROR: invalid sizes. Image ratio is: ' + str(image_ratio) + ' Desired ratio is: ' + str(ratio))
 
@@ -105,7 +108,7 @@ class ThumbsGenerator():
 		#Retrieve our source image from a URL
 		try:
 			fp = requests.get(image_url)
-			
+
 			#Load the URL data into an image
 			image_bytes = BytesIO(fp.content)
 
@@ -125,13 +128,16 @@ class ThumbsGenerator():
 			
 			#Resize the image
 			image_transformed = self.scale_and_crop(image, crop_type)
-
+			
 			#NOTE, we're saving the image into a cStringIO object to avoid writing to disk
 			set_image_name = self.get_file_name(image_url);
-
+			
 			#Generate UUID for file name
 			file_uuid = uuid.uuid4();
 
+			image_transformed[0].save('/var/www/_uploads/resized/' + set_image_name[0] + '.jpg')
+			image_transformed[1].save('/var/www/_uploads/thumb/' + set_image_name[0] + '.jpg')
+			
 			#Now we connect to our s3 bucket and upload from memory
 			if self.driver is None:
 				return 
@@ -139,7 +145,7 @@ class ThumbsGenerator():
 			driver_cred = self.driver()
 			container = driver_cred.get_container(container_name=self.bucket)
 			s3_folders = (str(self.scale_size[0]) + 'x' + str(self.scale_size[1]) + '_scale', str(self.crop_size[0]) + 'x' + str(self.crop_size[1]) + '_scalecrop')
-			
+
 			for index, img in enumerate(image_transformed):
 				ibytes = BytesIO()
 				img.save(ibytes, 'JPEG')
@@ -152,8 +158,9 @@ class ThumbsGenerator():
 			if callback is not None:
 				callback(images_callback)
 			
-		except ValueError:
-			log.error(ValueError)
+		except ValueError as e:
+			log.info(image_bytes)
+			log.error(e)
 		except IOError as e:
 			log.warn(fp.headers.get('content-type'))
 			log.error(e)
@@ -176,16 +183,17 @@ class ThumbsGenerator():
 			if image_type in ALLOWED_TYPES:
 				in_storage = self.check_file_in_storage(image_url, image_data)
 				if not in_storage:
+					log.info('============== File to convert ================')
+					log.info(image_url)
+					log.info('===============================================')
+
 					self.generate_thumbnail(image_url, image_data, callback)
-					print('====================== File to convert ============================')
-					print(image_data[key])
-					print('===================================================================')
 			else:
 				log.warn("File type is not an image.")
 		finally:
 			self.queue.task_done()
 			self.semaphore.release()
-			print('Thread finished')
+			log.info('Thread finished')
 
 
 	def check_file_in_storage(self, image_url, image_data):
@@ -193,7 +201,12 @@ class ThumbsGenerator():
 		if self.check_exists is not None and isinstance(self.check_exists, dict):
 				
 			if self.check_exists['key'] in image_data and self.check_exists['sub_key']:
-				data_loaded = json.loads(image_data[self.check_exists['key']]) if self.check_exists['json'] else image_data[self.check_exists['key']]
+				
+				if self.check_exists['json'] and isinstance(image_data[self.check_exists['key']], basestring):
+					data_loaded = json.loads(image_data[self.check_exists['key']])
+				
+				else:
+					data_loaded = image_data[self.check_exists['key']]
 				
 				if self.check_exists['sub_key'] in data_loaded:
 					check_exists = requests.head(image_url)
@@ -202,7 +215,7 @@ class ThumbsGenerator():
 					if 'etag' in check_exists.headers:
 
 						if data_loaded[self.check_exists['sub_key']] == get_tag.strip('"'):
-							log.warn('Image already in storage.')
+							log.info('Image already in storage.')
 
 							return True
 			
@@ -213,7 +226,7 @@ class ThumbsGenerator():
 						get_tag = check_exists.headers.get('etag')
 					
 						if image_data[self.check_exists['key']] == get_tag:
-							log.warn('Image already in storage.')
+							log.info('Image already in storage.')
 
 							return True
 
@@ -225,8 +238,7 @@ class ThumbsGenerator():
 		for row in data_dict:
 			self.queue.put(row)
 
-
-		print('Queue was generated!')
+		log.info('Queue was generated!')
 
 
 	def run_multithreading_download(self, key, callback):
@@ -239,13 +251,13 @@ class ThumbsGenerator():
 					thread_image = Thread(target=self.get_urls_from_dict, args=(key, callback))
 					thread_image.deamon = True
 					self.semaphore.acquire()
-					print('Thread started: {0}'.format(thread_image.name))
+					log.info('Thread started: {0}'.format(thread_image.name))
 					thread_image.start()
 			except self.queue.Empty:
-				print("The Queue ended.")
+				log.info("The Queue ended.")
 				break
 			except KeyboardInterrupt:
-				print("Ctrl-c received! Sending kill to threads...")
+				log.info("Ctrl-c received! Sending kill to threads...")
 				self.stop_threading = True
 
 		self.queue.join()

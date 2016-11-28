@@ -65,14 +65,16 @@ List of **S3_REGION** is provided in `libcloud docs <https://libcloud.readthedoc
 
 4. Create a thumbnailer instance:
 ::
-	thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, threads_num)
+	thumbnailer = ThumbsGenerator(scale_size, crop_size, driver, check_exists, threads_num)
 
 
 **scale_size** - tuple with two integer values e.g. (600, 800);
 
 **crop_size** - tuple with two integer values e.g. (300, 300);
 
-**driver**- our generated driver connector; *Default*: None
+**driver** - our generated driver connector; *Default*: None
+
+**check_exits** - Optional dict with information where to look for image hash generated from S3 and save in our dict or db  *Example*: {'key': 'metadata', 'sub_key': 'resized_s3_hash', 'json': True}, *sub_key* and *json* are optional too.
 
 **threads_num** - number of running threads at the same time. *Default*: 3
 
