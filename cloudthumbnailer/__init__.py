@@ -22,37 +22,33 @@ from pprint import pprint
 ALLOWED_TYPES = ['jpg', 'jpeg', 'gif', 'png']
 
 class ThumbsGenerator():
-	def __init__(self, scale_size, crop_size, driver=None, check_exists=None, threads_num=3):
+	def __init__(self, scale_size, crop_size, connector, check_exists=None, threads_num=3):
 		self.queue = Queue()
 		self.semaphore = Semaphore(threads_num)
-		self.driver = driver.driver
-		self.bucket = driver.bucket
+		self.driver = connector.driver
+		self.uploader = connector.uploader
 		self.crop_size = crop_size
 		self.scale_size = scale_size
 		self.check_exists = check_exists
 		self.stop_threading = False
 
 	def get_file_name(self, image_url):
-		split_url = image_url.split('/')
-		get_fname = split_url.pop()
-		split_name = get_fname.split('.')
+		filename = os.path.basename(image_url)
+		name_and_ext = os.path.splitext(filename)
 
-		ext = split_name.pop()
-		file_name = ''.join(split_name)
-
-		return (file_name, ext)
+		return name_and_ext
 
 
 	def scale_image_by_width(self, image, width):
-		width = width if image.size[0] >= width else image.size[0]
-		scaled_image = image.resize((width, int(round(width * image.size[1] / image.size[0]))), Image.NEAREST)
+		width = min(width, image.size[0])
+		scaled_image = image.resize((width, width * image.size[1] / image.size[0]), Image.NEAREST)
 
 		return scaled_image
 
 
 	def scale_image_by_height(self, image, height):
-		height = height if image.size[1] >= height else image.size[1]
-		scaled_image = image.resize((int(round(height * image.size[0] / image.size[1])), height), Image.NEAREST)
+		height = min(height, image.size[1])
+		scaled_image = image.resize((height * image.size[0] / image.size[1], height), Image.NEAREST)
 
 		return scaled_image
 
@@ -105,65 +101,62 @@ class ThumbsGenerator():
 	def generate_thumbnail(self, image_url, image_data, callback, crop_type='middle'):
 		images_callback = [image_data]
 		
-		#Retrieve our source image from a URL
+		# Retrieve our source image from a URL
 		try:
-			fp = requests.get(image_url)
-
-			#Load the URL data into an image
-			image_bytes = BytesIO(fp.content)
-
-			if 'content-type' in fp.headers and 'image/x' in fp.headers.get('content-type'):
-				log.warn('This type of image is not allowed: ' + fp.headers.get('content-type'))
-				
-				return
+			res = requests.get(image_url)
 		
 		except requests.exceptions.ConnectionError:
-			log.warn(image_url)
-			log.error(requests.exceptions.ConnectionError)
+			log.error('{0}: {1}'.format(requests.exceptions.ConnectionError, image_url))
 
 			return
+			
+		# Load the URL data into an image
+		image_bytes = BytesIO(res.content)
+
+		if 'content-type' in res.headers and 'image/x' in res.headers.get('content-type'):
+			log.warn('This type of image is not allowed: ' + res.headers.get('content-type'))
+			
+			return
+		
 		
 		try:
 			image = Image.open(image_bytes)
 			
-			#Resize the image
+			# Resize the image
 			image_transformed = self.scale_and_crop(image, crop_type)
 			
-			#NOTE, we're saving the image into a cStringIO object to avoid writing to disk
-			set_image_name = self.get_file_name(image_url);
+			# NOTE, we're saving the image into a cStringIO object to avoid writing to disk
+			image_name = self.get_file_name(image_url)
 			
-			#Generate UUID for file name
-			file_uuid = uuid.uuid4();
-
-			image_transformed[0].save('/var/www/_uploads/resized/' + set_image_name[0] + '.jpg')
-			image_transformed[1].save('/var/www/_uploads/thumb/' + set_image_name[0] + '.jpg')
-			
-			#Now we connect to our s3 bucket and upload from memory
+			# Now we connect to our s3 bucket and upload from memory
 			if self.driver is None:
 				return 
 			
-			driver_cred = self.driver()
-			container = driver_cred.get_container(container_name=self.bucket)
-			s3_folders = (str(self.scale_size[0]) + 'x' + str(self.scale_size[1]) + '_scale', str(self.crop_size[0]) + 'x' + str(self.crop_size[1]) + '_scalecrop')
+			driver = self.driver()
+			
+			# s3_folders = (str(self.scale_size[0]) + 'x' + str(self.scale_size[1]) + '_scale', str(self.crop_size[0]) + 'x' + str(self.crop_size[1]) + '_scalecrop')
+			s3_folders = ('{0}x{1}_scale'.format(self.scale_size[0], self.scale_size[1]),
+						'{0}x{1}_scalecrop'.format(self.crop_size[0], self.crop_size[1]))
+
+			# Generate UUID for file name
+			file_uuid = uuid.uuid4()
 
 			for index, img in enumerate(image_transformed):
 				ibytes = BytesIO()
 				img.save(ibytes, 'JPEG')
 				ibytes.seek(0)
-				s3_img_obj = driver_cred.upload_object_via_stream(iterator=ibytes,
-													container=container,
-													object_name= s3_folders[index] + '/' + set_image_name[0] + '_' + str(file_uuid) + '.jpg')
+				object_name = '{0}/{1}_{2}.jpg'.format(s3_folders[index], image_name[0], file_uuid)
+				s3_img_obj = self.uploader(driver, ibytes, object_name)
+				
 				images_callback.append(s3_img_obj)
 			
 			if callback is not None:
 				callback(images_callback)
 			
 		except ValueError as e:
-			log.info(image_bytes)
-			log.error(e)
+			log.error('{0}: {1}'.format(e, image_bytes))
 		except IOError as e:
-			log.warn(fp.headers.get('content-type'))
-			log.error(e)
+			log.error('{0}: {1}'.format(e, res.headers.get('content-type')))
 
 	def get_dict_csv(self, csv_path):
 		csvfile = open(csv_path)
@@ -172,6 +165,8 @@ class ThumbsGenerator():
 		return reader
 
 	def get_urls_from_dict(self, key, callback):
+		
+		# Suspend execution of the calling thread for the given number of seconds
 		sleep(0.1)
 		
 		try:
@@ -183,9 +178,7 @@ class ThumbsGenerator():
 			if image_type in ALLOWED_TYPES:
 				in_storage = self.check_file_in_storage(image_url, image_data)
 				if not in_storage:
-					log.info('============== File to convert ================')
-					log.info(image_url)
-					log.info('===============================================')
+					log.info('Before Thumbnail generation: {0}'.format(image_url))
 
 					self.generate_thumbnail(image_url, image_data, callback)
 			else:
@@ -200,32 +193,26 @@ class ThumbsGenerator():
 		
 		if self.check_exists is not None and isinstance(self.check_exists, dict):
 				
-			if self.check_exists['key'] in image_data and self.check_exists['sub_key']:
+			if self.check_exists['key'] in image_data:
 				
-				if self.check_exists['json'] and isinstance(image_data[self.check_exists['key']], basestring):
-					data_loaded = json.loads(image_data[self.check_exists['key']])
+				data_loaded = image_data[self.check_exists['key']]
+				if self.check_exists['json'] and isinstance(data_loaded, basestring):
+					data_loaded = json.loads(data_loaded)
 				
-				else:
-					data_loaded = image_data[self.check_exists['key']]
+				check_head = requests.head(image_url)
 				
-				if self.check_exists['sub_key'] in data_loaded:
-					check_exists = requests.head(image_url)
-					get_tag = check_exists.headers.get('etag')
+				if 'etag' in check_head.headers:
+					etag = check_head.headers.get('etag')
 					
-					if 'etag' in check_exists.headers:
-
-						if data_loaded[self.check_exists['sub_key']] == get_tag.strip('"'):
+					if self.check_exists['sub_key'] and self.check_exists['sub_key'] in data_loaded:
+						
+						if data_loaded[self.check_exists['sub_key']] == etag.strip('"'):
 							log.info('Image already in storage.')
 
 							return True
-			
-			elif self.check_exists['key'] in image_data:
-					check_exists = requests.head(image_url)
-					
-					if 'etag' in check_exists.headers:
-						get_tag = check_exists.headers.get('etag')
-					
-						if image_data[self.check_exists['key']] == get_tag:
+					else:
+
+						if image_data[self.check_exists['key']] == etag.strip('"'):
 							log.info('Image already in storage.')
 
 							return True
@@ -266,8 +253,8 @@ class ThumbsGenerator():
 
 		# Reading CSV data and converting it to data_dict
 		reader = self.get_dict_csv(csv_path)
-		self.generate_items_queue(reader)
-		self.run_multithreading_download(key, callback)
+		self.download_from_dict(reader, key, callback)
+
 
 	def download_from_dict(self, data_dict, key='url', callback=None):
 

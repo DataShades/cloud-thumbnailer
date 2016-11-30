@@ -72,9 +72,9 @@ List of **S3_REGION** is provided in `libcloud docs <https://libcloud.readthedoc
 
 **crop_size** - tuple with two integer values e.g. (300, 300);
 
-**driver** - our generated driver connector; *Default*: None
+**driver** - our generated driver connector;
 
-**check_exits** - Optional dict with information where to look for image hash generated from S3 and save in our dict or db  *Example*: {'key': 'metadata', 'sub_key': 'resized_s3_hash', 'json': True}, *sub_key* and *json* are optional too.
+**check_exits** - Optional dict with information where to look for image hash generated from S3 and save in our dict or db  *Example*: {'key': 'metadata', 'sub_key': 'resized_s3_hash', 'json': True}, *sub_key* and *json* are optional too. *Default*: None
 
 **threads_num** - number of running threads at the same time. *Default*: 3
 
@@ -101,7 +101,7 @@ Code sample:
 
 	driver = CloudConnector('s3', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
 
-	thumbnailer = ThumbsGenerator((600, 800), (300, 300), driver, 2)
+	thumbnailer = ThumbsGenerator((600, 800), (300, 300), driver, None, 2)
 
 	thumbnailer.download_from_csv('/home/user/some-user/sample.csv', key='url', my_func_callback)
 
