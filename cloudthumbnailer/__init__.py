@@ -199,7 +199,13 @@ class ThumbsGenerator():
 				if self.check_exists['json'] and isinstance(data_loaded, basestring):
 					data_loaded = json.loads(data_loaded)
 				
-				check_head = requests.head(image_url)
+				try:
+					check_head = requests.head(image_url)
+				except requests.exceptions.ConnectionError as e:
+					log.error('{0}: {1}'.format(requests.exceptions.ConnectionError, image_url))
+
+					raise e
+
 				
 				if 'etag' in check_head.headers:
 					etag = check_head.headers.get('etag')
