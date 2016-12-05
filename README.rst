@@ -99,7 +99,7 @@ Code sample:
 	from cloudthumbnailer.cloud_connector import CloudConnector
 	from cloudthumbnailer import ThumbsGenerator
 
-	driver = CloudConnector('s3', 'ACCESS_KEY, 'SECRET_KEY', 'bucket-name')
+	driver = CloudConnector('s3', 'S3_REGION', 'ACCESS_KEY', 'SECRET_KEY', 'bucket-name')
 
 	thumbnailer = ThumbsGenerator((600, 800), (300, 300), driver, None, 2)
 

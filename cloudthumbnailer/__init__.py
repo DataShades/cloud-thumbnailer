@@ -145,7 +145,8 @@ class ThumbsGenerator():
 				ibytes = BytesIO()
 				img.save(ibytes, 'JPEG')
 				ibytes.seek(0)
-				object_name = '{0}/{1}_{2}.jpg'.format(s3_folders[index], image_name[0], file_uuid)
+				modified_name = image_name[0].replace('+', '_')
+				object_name = '{0}/{1}_{2}.jpg'.format(s3_folders[index], modified_name, file_uuid)
 				s3_img_obj = self.uploader(driver, ibytes, object_name)
 				
 				images_callback.append(s3_img_obj)
@@ -201,6 +202,7 @@ class ThumbsGenerator():
 				
 				try:
 					check_head = requests.head(image_url)
+
 				except requests.exceptions.ConnectionError as e:
 					log.error('{0}: {1}'.format(requests.exceptions.ConnectionError, image_url))
 
@@ -211,7 +213,7 @@ class ThumbsGenerator():
 					etag = check_head.headers.get('etag')
 					
 					if self.check_exists['sub_key'] and self.check_exists['sub_key'] in data_loaded:
-						
+
 						if data_loaded[self.check_exists['sub_key']] == etag.strip('"'):
 							log.info('Image already in storage.')
 
