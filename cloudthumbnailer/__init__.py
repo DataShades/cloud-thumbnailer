@@ -154,7 +154,7 @@ class ThumbsGenerator():
 
 			for index, img in enumerate(image_transformed):
 				# upload functionality to S3
-				image_data = self.upload_to_s3(img, index, image_name, s3_folders, file_uuid)
+				image_data = self.upload_to_s3(driver, img, index, image_name, s3_folders, file_uuid)
 				images_callback.append(image_data)
 
 			if callback is not None:
@@ -192,7 +192,7 @@ class ThumbsGenerator():
 
 			for index, img in enumerate(image_transformed):
 				# upload functionality to S3
-				image_data = self.upload_to_s3(img, index, image_name, s3_folders, None)
+				image_data = self.upload_to_s3(driver, img, index, image_name, s3_folders, None)
 				images_callback.append(image_data)
 
 			if callback is not None:
@@ -203,7 +203,7 @@ class ThumbsGenerator():
 			log.error('{0}: {1}'.format(e, image_bytes[1]))
 
 
-	def upload_to_s3(self, img, index, image_name, s3_folders, file_uuid=None):
+	def upload_to_s3(self, driver, img, index, image_name, s3_folders, file_uuid=None):
 		ibytes = BytesIO()
 		img.save(ibytes, 'JPEG')
 		ibytes.seek(0)
