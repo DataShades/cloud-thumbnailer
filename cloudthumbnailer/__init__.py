@@ -260,7 +260,7 @@ class ThumbsGenerator():
 			if thumb_url in image_data:
 
 				try:
-					thumb_head = requests.head(thumb_url)
+					thumb_head = requests.head(image_data[thumb_url])
 
 				except requests.exceptions.ConnectionError as e:
 					log.error('{0}: {1}'.format(requests.exceptions.ConnectionError, image_url))
