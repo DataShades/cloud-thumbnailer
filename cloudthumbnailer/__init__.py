@@ -188,7 +188,7 @@ class ThumbsGenerator():
 				return
 
 			driver = self.driver()
-			s3_folders = ('{0}x{1}_scalecrop'.format(self.crop_size[0], self.crop_size[1]))
+			s3_folders = ('{0}x{1}_scalecrop'.format(self.crop_size[0], self.crop_size[1]),)
 
 			for index, img in enumerate(image_transformed):
 				# upload functionality to S3
