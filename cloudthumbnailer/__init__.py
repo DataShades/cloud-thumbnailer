@@ -52,54 +52,8 @@ class ThumbsGenerator():
 
 		return scaled_image
 
-	
-	def crop_image(self, image, size, crop_type):
-		
-		# Crop in the top, middle or bottom
-		if crop_type == 'top':
-			box = (0, 0, size[0], size[1])
-		
-		elif crop_type == 'middle':
-			box = (round((image.size[0] - size[0]) / 2), 0,
-			round((image.size[0] + size[0]) / 2), size[1])
-		
-		elif crop_type == 'bottom':
-			box = (0, (image.size[1] - size[1]), size[0], image.size[1])
-		
-		else :
-			raise ValueError('ERROR: invalid value for crop_type')
-		
-		croped_image = image.crop(box)
 
-		return croped_image
-
-
-	def scale_and_crop(self, image, crop_type):
-
-		# Get current and desired ratio for the images
-		image_ratio = image.size[0] / float(image.size[1])
-		ratio = self.scale_size[0] / float(self.scale_size[1])
-
-		if ratio >= image_ratio:
-			
-			#Resize the image
-			image_resized = self.scale_image_by_width(image, self.scale_size[0])
-			image_cropped = self.crop_image(image_resized, self.crop_size, crop_type)
-
-		elif ratio < image_ratio:
-			
-			#Resize the image
-			image_resized = self.scale_image_by_height(image, self.scale_size[1])
-			image_cropped = self.crop_image(image_resized, self.crop_size, crop_type)
-
-		else:
-			raise ValueError('ERROR: invalid sizes. Image ratio is: ' + str(image_ratio) + ' Desired ratio is: ' + str(ratio))
-
-		return image_resized, image_cropped
-
-	
-	def generate_thumbnail(self, image_url, image_data, callback, crop_type='middle'):
-		images_callback = [image_data]
+	def prepare_image(self, image_url):
 		
 		# Retrieve our source image from a URL
 		try:
@@ -109,32 +63,89 @@ class ThumbsGenerator():
 			log.error('{0}: {1}'.format(requests.exceptions.ConnectionError, image_url))
 
 			return
-			
+
 		# Load the URL data into an image
 		image_bytes = BytesIO(res.content)
 
 		if 'content-type' in res.headers and 'image/x' in res.headers.get('content-type'):
 			log.warn('This type of image is not allowed: ' + res.headers.get('content-type'))
-			
+
 			return
-		
-		
+
+		return image_bytes, res.headers.get('content-type')
+
+
+	def crop_image(self, image, size):
+		thumb = image.copy()
+		half_width = thumb.size[0] / 2
+		half_height = thumb.size[1] / 2
+
+		if thumb.size[0] != thumb.size[1]:
+
+			if thumb.size[0] > thumb.size[1]:
+				half_size = thumb.size[1] / 2
+			else:
+				half_size = thumb.size[0] / 2
+
+			box = (
+					half_width - half_size,
+					half_height - half_size,
+					half_width + half_size,
+					half_height + half_size
+				)
+			thumb = thumb.crop(box)
+
+		thumb.thumbnail(size)
+
+		return thumb
+
+
+	def scale_and_crop(self, image):
+
+		# Get current and desired ratio for the images
+		image_ratio = image.size[0] / float(image.size[1])
+		ratio = self.scale_size[0] / float(self.scale_size[1])
+
+		if ratio >= image_ratio:
+			
+			#Resize the image
+			image_resized = self.scale_image_by_width(image, self.scale_size[0])
+			image_cropped = self.crop_image(image_resized, self.crop_size)
+
+		elif ratio < image_ratio:
+			
+			#Resize the image
+			image_resized = self.scale_image_by_height(image, self.scale_size[1])
+			image_cropped = self.crop_image(image_resized, self.crop_size)
+
+		else:
+			raise ValueError('ERROR: invalid sizes. Image ratio is: ' + str(image_ratio) + ' Desired ratio is: ' + str(ratio))
+
+		return image_resized, image_cropped
+
+
+	def generate_thumbnail(self, image_url, image_data, callback):
+		images_callback = [image_data]
+		image_bytes = self.prepare_image(image_url)
+
+		if image_bytes is None:
+			return
+
 		try:
-			image = Image.open(image_bytes)
-			
+			image = Image.open(image_bytes[0])
+
 			# Resize the image
-			image_transformed = self.scale_and_crop(image, crop_type)
-			
+			image_transformed = self.scale_and_crop(image)
+
 			# NOTE, we're saving the image into a cStringIO object to avoid writing to disk
 			image_name = self.get_file_name(image_url)
-			
+
 			# Now we connect to our s3 bucket and upload from memory
 			if self.driver is None:
-				return 
-			
+
+				return
+
 			driver = self.driver()
-			
-			# s3_folders = (str(self.scale_size[0]) + 'x' + str(self.scale_size[1]) + '_scale', str(self.crop_size[0]) + 'x' + str(self.crop_size[1]) + '_scalecrop')
 			s3_folders = ('{0}x{1}_scale'.format(self.scale_size[0], self.scale_size[1]),
 						'{0}x{1}_scalecrop'.format(self.crop_size[0], self.crop_size[1]))
 
@@ -142,22 +153,70 @@ class ThumbsGenerator():
 			file_uuid = uuid.uuid4()
 
 			for index, img in enumerate(image_transformed):
-				ibytes = BytesIO()
-				img.save(ibytes, 'JPEG')
-				ibytes.seek(0)
-				modified_name = image_name[0].replace('+', '_')
-				object_name = '{0}/{1}_{2}.jpg'.format(s3_folders[index], modified_name, file_uuid)
-				s3_img_obj = self.uploader(driver, ibytes, object_name)
-				
-				images_callback.append(s3_img_obj)
-			
+				# upload functionality to S3
+				image_data = self.upload_to_s3(img, index, image_name, s3_folders, file_uuid)
+				images_callback.append(image_data)
+
 			if callback is not None:
 				callback(images_callback)
-			
+
 		except ValueError as e:
-			log.error('{0}: {1}'.format(e, image_bytes))
+			log.error('{0}: {1}'.format(e, image_bytes[0]))
 		except IOError as e:
-			log.error('{0}: {1}'.format(e, res.headers.get('content-type')))
+			log.error('{0}: {1}'.format(e, image_bytes[1]))
+
+
+	def generate_thumbnail_only(self, image_url, image_data, callback):
+		images_callback = [image_data]
+		image_bytes = self.prepare_image(image_url)
+
+		if image_bytes is None:
+			return
+
+		try:
+			image = Image.open(image_bytes[0])
+
+			# Resize the image
+			image_transformed = (self.crop_image(image, self.crop_size),)
+			
+			# NOTE, we're saving the image into a cStringIO object to avoid writing to disk
+			image_name = self.get_file_name(image_url)
+
+			# Now we connect to our s3 bucket and upload from memory
+			if self.driver is None:
+
+				return
+
+			driver = self.driver()
+			s3_folder = ('{0}x{1}_scalecrop'.format(self.crop_size[0], self.crop_size[1]))
+
+			for index, img in enumerate(image_transformed):
+				# upload functionality to S3
+				image_data = self.upload_to_s3(img, index, image_name, s3_folders, None)
+				images_callback.append(image_data)
+
+			if callback is not None:
+				callback(images_callback)
+		except ValueError as e:
+			log.error('{0}: {1}'.format(e, image_bytes[0]))
+		except IOError as e:
+			log.error('{0}: {1}'.format(e, image_bytes[1]))
+
+
+	def upload_to_s3(self, img, index, image_name, s3_folders, file_uuid=None):
+		ibytes = BytesIO()
+		img.save(ibytes, 'JPEG')
+		ibytes.seek(0)
+		modified_name = image_name[0].replace('+', '_')
+
+		if file_uuid is not None:
+			object_name = '{0}/{1}_{2}.jpg'.format(s3_folders[index], modified_name, file_uuid)
+		else:
+			object_name = '{0}/{1}.jpg'.format(s3_folders[index], modified_name)
+		s3_img_obj = self.uploader(driver, ibytes, object_name)
+
+		return s3_img_obj
+
 
 	def get_dict_csv(self, csv_path):
 		csvfile = open(csv_path)
@@ -165,11 +224,12 @@ class ThumbsGenerator():
 
 		return reader
 
+
 	def get_urls_from_dict(self, key, callback):
-		
+
 		# Suspend execution of the calling thread for the given number of seconds
 		sleep(0.1)
-		
+
 		try:
 			image_data = self.queue.get()
 			image_url = image_data[key]
@@ -178,10 +238,12 @@ class ThumbsGenerator():
 
 			if image_type in ALLOWED_TYPES:
 				in_storage = self.check_file_in_storage(image_url, image_data)
-				if not in_storage:
+				if not in_storage[0]:
 					log.info('Before Thumbnail generation: {0}'.format(image_url))
 
 					self.generate_thumbnail(image_url, image_data, callback)
+				elif in_storage[0] and not in_storage[1]:
+					self.generate_thumbnail_only(image_url, image_data, callback)
 			else:
 				log.warn("File type is not an image.")
 		finally:
@@ -190,25 +252,48 @@ class ThumbsGenerator():
 			log.info('Thread finished')
 
 
-	def check_file_in_storage(self, image_url, image_data):
-		
-		if self.check_exists is not None and isinstance(self.check_exists, dict):
-				
-			if self.check_exists['key'] in image_data:
-				
-				data_loaded = image_data[self.check_exists['key']]
-				if self.check_exists['json'] and isinstance(data_loaded, basestring):
-					data_loaded = json.loads(data_loaded)
-				
+	def check_thumb_in_storage(self, image_data):
+
+		if 'thumb_key' in self.check_exists:
+			thumb_url = self.check_exists['thumb_key'][0]
+
+			if thumb_url in image_data:
+
 				try:
-					check_head = requests.head(image_url)
+					thumb_head = requests.head(thumb_url)
 
 				except requests.exceptions.ConnectionError as e:
 					log.error('{0}: {1}'.format(requests.exceptions.ConnectionError, image_url))
 
 					raise e
 
-				
+				if thumb_head.status_code > 310 and 'etag' not in thumb_head.headers:
+
+					return False
+
+		return True
+
+
+	def check_file_in_storage(self, image_url, image_data):
+		
+		if self.check_exists is not None and isinstance(self.check_exists, dict):
+
+			if self.check_exists['key'] in image_data:
+				data_loaded = image_data[self.check_exists['key']]
+
+				if self.check_exists['json'] and isinstance(data_loaded, basestring):
+					data_loaded = json.loads(data_loaded)
+
+				try:
+					check_head = requests.head(image_url)
+
+
+				except requests.exceptions.ConnectionError as e:
+					log.error('{0}: {1}'.format(requests.exceptions.ConnectionError, image_url))
+
+					raise e
+
+
 				if 'etag' in check_head.headers:
 					etag = check_head.headers.get('etag')
 					
@@ -217,15 +302,17 @@ class ThumbsGenerator():
 						if data_loaded[self.check_exists['sub_key']] == etag.strip('"'):
 							log.info('Image already in storage.')
 
-							return True
+							is_thumb = self.check_thumb_in_storage(data_loaded)
+
+							return True, is_thumb
 					else:
 
 						if image_data[self.check_exists['key']] == etag.strip('"'):
 							log.info('Image already in storage.')
 
-							return True
+							return True, True
 
-		return False
+		return False, None
 
 
 	def generate_items_queue(self, data_dict):
@@ -256,6 +343,7 @@ class ThumbsGenerator():
 				self.stop_threading = True
 
 		self.queue.join()
+
 
 	def download_from_csv(self, csv_path, key='url', callback=None):
 
