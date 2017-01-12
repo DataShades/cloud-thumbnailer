@@ -95,7 +95,10 @@ class ThumbsGenerator():
 				)
 			thumb = thumb.crop(box)
 
-		thumb.thumbnail(size)
+		if thumb.size[0] >= size[0] or thumb.size[1] >= size[1]:
+			thumb.thumbnail(size)
+		else:
+			thumb = thumb.resize(size)
 
 		return thumb
 
